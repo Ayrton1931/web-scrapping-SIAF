@@ -190,3 +190,281 @@ for i in years:
     final_product_name = r"SIAF_"+ i + r".csv"                         #### Definicion del nombre del file
     final_product_name = os.path.join(Output_path, final_product_name) #### Definicion de la direccion
     Final_product.to_csv( final_product_name, encoding="latin-1")      #### Exportar la info. en formato CSV y latin-1.(Este permite mantener las tildes y otras letras propias del castellano)
+    
+    
+####################################################################################################
+#################################################################################################### Organizar la informacion.
+####################################################################################################
+
+list_of_names_files = os.listdir(Output_path) #### Get inside the folder.
+for ss in list_of_names_files:
+        if re.search( 'desktop.ini', ss ):
+            list_of_names_files.remove('desktop.ini') 
+
+List_content_files=[]
+for i in list_of_names_files:
+    file_path=os.path.join(Output_path, i)
+    content_file = pd.read_csv(file_path, encoding="latin-1") ### Read the file as html document 
+    List_content_files.append(content_file)
+
+List_years=[]
+for i in List_content_files:
+    new_columns_names = [ "index", "Categories L", "PIA", "PIM",
+                         "Certificacion", "Comp. Anual", "Aten. Compromiso", 
+                         "Devengado", "Girado", "Avance"]
+    i.columns = new_columns_names
+    i["Categorias"] = i["Categories L"].apply(lambda x: x.split(' ')[0] )
+    ####
+    ####Split df's by index of column "Categorias".
+    ####
+    Pliego_in = i[i["Categorias"]=='Pliego'].index.values.astype(int)
+    Pliego_in = Pliego_in.tolist()
+    List_aa = [] ### A list that contain de relevant indexes.
+    for jj in range (0,  len(Pliego_in)):
+        if jj < (len(Pliego_in)-1) :
+            aa = [ Pliego_in[jj] , Pliego_in[jj+1] ]
+            List_aa.append(aa)
+        else:
+            last_in = len(i)-1
+            aa = [ Pliego_in[jj] , last_in ]
+            List_aa.append(aa)
+   
+    List_grupo_level = []
+    for jj in range(0, len(List_aa)):
+        if jj < (len(List_aa) -1 ):
+            f_row = List_aa[jj][0]
+            e_row = List_aa[jj][1]
+            df_grupo = i.iloc[ f_row:e_row , ]
+        else:
+            f_row = List_aa[jj][0]
+            e_row = List_aa[jj][1]+1
+            df_grupo = i.iloc[ f_row:e_row , ]
+        ###
+        ### Generate ID variables which classify the elements at differents levels 
+        ###       
+        #### Level Group
+        grupo_name = df_grupo[df_grupo["Categorias"]=='Grupo'].index.values.astype(int)
+        grupo_name = grupo_name.tolist()
+        grupo_name = df_grupo["Categories L"][grupo_name[0]]
+        df_grupo['ID_Grupo'] = df_grupo.apply(lambda x: grupo_name , axis=1)
+        #### Level division
+        grupo_name = df_grupo[df_grupo["Categorias"]=='División'].index.values.astype(int)
+        grupo_name = grupo_name.tolist()
+        grupo_name = df_grupo["Categories L"][grupo_name[0]]
+        df_grupo['ID_Division'] = df_grupo.apply(lambda x: grupo_name , axis=1)
+        #### Level Funcion
+        grupo_name = df_grupo[df_grupo["Categorias"]=='Función'].index.values.astype(int)
+        grupo_name = grupo_name.tolist()
+        grupo_name = df_grupo["Categories L"][grupo_name[0]]
+        df_grupo['ID_Funcion'] = df_grupo.apply(lambda x: grupo_name , axis=1)
+        #### Level Pliego
+        grupo_name = df_grupo[df_grupo["Categorias"]=='Pliego'].index.values.astype(int)
+        grupo_name = grupo_name.tolist()
+        grupo_name = df_grupo["Categories L"][grupo_name[0]]
+        df_grupo['ID_Pliego'] = df_grupo.apply(lambda x: grupo_name , axis=1)
+        
+        df_grupo = df_grupo[df_grupo['Categorias']!='TOTAL']
+        df_grupo = df_grupo[df_grupo['Categorias']!='Nivel']
+        df_grupo = df_grupo[df_grupo['Categorias']!='Sector']
+    
+        List_grupo_level.append(df_grupo)
+        #### Establecer ID
+        ####### Pliego
+       
+    for jj in range(0, len(List_grupo_level)):
+        if jj==0:
+            df = List_grupo_level[jj]
+        else:
+            df=df.append(List_grupo_level[jj])
+            
+    ####3
+    #### Filter by levels
+    #### 1. Pliego
+    List_Pliego=[]
+    pliego_names = df['ID_Pliego'].drop_duplicates()
+    for jj in pliego_names:
+        print(jj)
+        df_pliego = df[df['ID_Pliego']==jj]
+        row_pliego = df_pliego[df_pliego['Categorias']=='Pliego']
+        row_pliego = row_pliego.drop_duplicates(subset='Categories L') ###
+        del row_pliego['index']
+        ID_xx= ['---']
+        ID_xx = pd.DataFrame(data=ID_xx)
+        ID_xx.columns=['ID']
+        row_pliego=row_pliego.reset_index()
+        del row_pliego['index']        
+        row_pliego = pd.concat( [row_pliego, ID_xx], axis=1 )
+        
+        funcion_names = df_pliego['ID_Funcion'].drop_duplicates()
+        
+        List_funcion = []
+        for kk in funcion_names:
+            print( '    '+ kk)
+            df_funcion = df_pliego[df_pliego['ID_Funcion']==kk]
+            row_funcion = df_funcion[df_funcion['Categorias']=='Función']
+            row_funcion = row_funcion.drop_duplicates(subset ='Categories L')
+            del row_funcion['index']
+            ID_xx= ['---']
+            ID_xx = pd.DataFrame(data=ID_xx)
+            ID_xx.columns=['ID']
+            row_funcion=row_funcion.reset_index()
+            del row_funcion['index']
+            row_funcion = pd.concat( [row_funcion, ID_xx], axis=1 )
+            division_names = df_funcion[ 'ID_Division' ].drop_duplicates()
+            
+            List_division=[]
+            for ll in division_names:
+                print( '        '+ ll)
+                df_division = df_funcion[df_funcion['ID_Division']==ll]
+                row_division = df_division[df_division['Categorias']=='División'] #### Separo una fila que sera el titulo de la division funcional
+                row_division = row_division.drop_duplicates(subset ='Categories L') ### Se quitan los duplicatos
+                del row_division['index']
+                ID_xx= ['---']
+                ID_xx = pd.DataFrame(data=ID_xx)
+                ID_xx.columns=['ID']
+                row_division=row_division.reset_index()
+                del row_division['index']
+                row_division = pd.concat( [row_division, ID_xx], axis=1 )
+                grupo_names = df_division['ID_Grupo'].drop_duplicates() ### Se obtienen los nombres de los grupos que estan dentro de 
+                List_group = []  ### Esca lista contiene los grupos de cada division
+                for mm in grupo_names:
+                    print( '          '+ mm)
+                    df_grupo = df_division[df_division['ID_Grupo']== mm ]  ### Se filtra cada division por cada grupo que lo conforma
+                    #### Keep names of group
+                    row_group = df_grupo[df_grupo['Categorias']=='Grupo'] ### Se separa una fila el cual será el titulo para el grupo
+                    del row_group['index']
+                    rows_projects = df_grupo[df_grupo['Categorias']!='Pliego'] ### Se quitan las filas demás y solo se deja el proyecto.
+                    rows_projects = rows_projects[rows_projects['Categorias']!='Función'] ###
+                    rows_projects = rows_projects[rows_projects['Categorias']!='División'] ###
+                    rows_projects = rows_projects[rows_projects['Categorias']!='Grupo'] ###
+                    rows_projects = rows_projects[rows_projects['Categorias']!='Producto'] ###
+                    rows_projects = rows_projects[rows_projects['Categorias']!='Atención'] ###
+                    def functionID(w,x,y,z, add):
+                        w1 = ''.join(filter(str.isdigit, w))
+                        x1 = ''.join(filter(str.isdigit, x))
+                        y1 = ''.join(filter(str.isdigit, y))
+                        z1 = ''.join(filter(str.isdigit, z))
+                        add1 = ''.join(filter(str.isdigit, add))
+                        ID = str(w1) + '-' + str(x1) + '-' + str(y1) +'-' + str(z1) + '-' + str(add1)
+                        return(ID)
+                    del rows_projects['index']    
+                    ID_xxx = rows_projects.apply(lambda x: functionID(x['ID_Pliego'], x['ID_Funcion'], x['ID_Division'], x['ID_Grupo'], x['Categorias'] ), axis=1)    
+                    ID_xxx = pd.DataFrame(ID_xxx)
+                    ID_xxx.columns=['ID']
+                    rows_projects = pd.concat( [rows_projects, ID_xxx], axis=1 )
+                    rows_projects = rows_projects.reset_index()
+                    del rows_projects['index']
+                    ID_xx= ['---']
+                    ID_xx = pd.DataFrame(data=ID_xx)
+                    ID_xx.columns=['ID']
+                    row_group=row_group.reset_index()
+                    del row_group['index']
+                    row_group = pd.concat( [row_group, ID_xx], axis=1 )
+                    row_group = row_group.append( rows_projects ) ### Se une el nombre nombre del grupo con los proyectos    
+                    
+                    
+                    List_group.append(row_group) ### Se enlista los grupos que conforma un division
+                #### Se toma cada lista y se unen sus componentes. Así, se obtine un solo dataframe el cual contiene los grupos que contiene cada division  
+                if len(List_group)==1: ### En caso de que la division se conformada por un solo grupo,
+                    df_grupo = List_group[0]
+                else:                  ### En caso de que la division sea conformada por mas grupos
+                    for mm in range(0, len(List_group)): ### Se utiliza append para unir los data frames
+                        if mm==0:
+                            df_grupo = List_group[mm]
+                        else:
+                            df_grupo = df_grupo.append(List_group[mm]) ### Los diferentes grupos en cada Division
+                
+                row_division=row_division.append(df_grupo) ### A dicho dataframes de grupos, se le adhiere el nombre la division
+                List_division.append(row_division) ### Cada division se coloca en una lista
+            if len(List_division)==1:
+                df_division = List_division[0]
+            else:
+                for ll in range(0, len(List_division) ):
+                    if ll==0:
+                        df_division = List_division[ll]
+                    else:
+                        df_division = df_division.append(List_division[ll])
+            
+            row_funcion = row_funcion.append(df_division)
+            List_funcion.append(row_funcion)
+        
+        if len(List_funcion)==1:
+            df_funcion = List_funcion[0]
+        else:
+            for kk1 in range(0, len(List_funcion)):
+                if kk1==0:
+                    df_funcion=List_funcion[kk1]
+                else:
+                    df_funcion= df_funcion.append(List_funcion[kk1])
+        row_pliego=row_pliego.append(df_funcion)
+        List_Pliego.append(row_pliego)
+    
+    if len(List_Pliego)==1:
+        df = List_Pliego[0]
+    else:
+        for jj in range(0, len(List_Pliego)):
+            if jj==0:
+                df = List_Pliego[0]
+            else:
+                df = df.append(List_Pliego[jj])
+    List_years.append(df)            
+    
+def func1(x):
+    if re.search('Pliego ', x):
+        x1 = x
+        return(x1)
+    elif re.search('Función ', x):
+        x1 = ' ' + ' ' + x
+        return(x1)
+    elif re.search('División Funcional ', x):
+        x1 = ' ' + ' ' + ' ' + ' ' +x
+        return(x1)
+    elif re.search('Grupo Funcional ', x):
+        x1 = ' ' + ' ' + ' ' + ' ' + ' ' + ' ' + x
+        return(x1)
+    else: 
+        x1 = ' ' + ' ' + ' ' + ' '  + ' ' + ' ' + ' '  + ' ' + x
+        return(x1)
+
+List_year_order = []        
+for i in List_years:
+    df=i
+    df['Categories L'] = df.apply(lambda x : func1(x['Categories L']) , axis=1)
+    List_year_order.append(df)
+
+for i in range(0, len(List_year_order)):
+    year = 2014 + i
+    file_names = 'SIAF' + '_' + str(year) + '_' + 'ordered.csv'
+    file_path = os.path.join(Output_path, file_names)
+    List_year_order[i].to_csv(file_path, sep=';', encoding='latin-1')
+    
+#####    
+##### Unir los nombres
+##### 
+List_names_to_classify=[]       
+for i in range(0, len(List_years)):
+    df= List_years[i][['Categories L', 'ID', 'ID_Grupo', 'ID_Division', 'ID_Funcion', 'ID_Pliego']]
+    if i==0:
+        df_union = df
+    else:
+        df_union = df_union.append(df)
+df_union = df_union.drop_duplicates(subset ='ID') 
+file_names = 'SIAF' + '_' + 'pp.csv'
+file_path = os.path.join(Output_path, file_names)
+df_union.to_csv(file_path, sep=';', encoding='latin-1')   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
